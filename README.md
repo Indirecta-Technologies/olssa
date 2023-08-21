@@ -3,9 +3,8 @@ Obfuscated Luau Script Security Auditor by Indirecta
 
 ## Introduction
 
-Welcome to the documentation for OLSSA (Obfuscated Luau Script Security Auditor).  
 OLSSA is a security utility designed for Roblox script developers to enhance the security of their games by detecting potential unauthorized behavior
-in Roblox models with obfuscated scripts.  
+in Roblox models with obfuscated scripts.
 
 ## Table of Contents
 
