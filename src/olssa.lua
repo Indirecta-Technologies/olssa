@@ -23,14 +23,16 @@ do
 		["VERBOSE"] = true; -- Whether or not to log all spoof actions, requests, script activity
 		["EXTRA_VERBOSE"] = false; -- Experimental, logs activity such as indexes from metamethods
 
-		["REVISION"] = "alpha-v2"; -- OLSSA Snippet Revision
+		["REVISION"] = "alpha-v2.2"; -- OLSSA Snippet Revision
 		["LOG_FILTER"] = nil; -- Set this to a string with a valid lua pattern that will match your desired logs. When the pattern matches it will
-							  -- prevent the OLSSA Verbose log from sending to console
+		-- prevent the OLSSA Verbose log from sending to console
 
 		--[[ REQUIRE ]]--
 
 		["REQUIRE_SPOOF"] = true; -- Whether or not to spoof the modules required with custom scripts in workspace
-		["REQUIRE_SPOOF_PREFIX"] = "_OLSSA-"; -- The prefix used in the name of spoofed modules (eg. _OLSSA-1234567890)
+		["REQUIRE_PREFIX"] = "_OLSSA-"; -- The prefix used in the name of spoofed modules (eg. _OLSSA-1234567890)
+		["REQUIRE_LOCALMODRDF"] = nil; -- Redefine a local module's instance variable working up from one of it's parents
+		["REQUIRE_SPOOF_FOLDER"] = workspace; -- Where to look for the local modules when spoofing
 
 		--[[ GAME & SERVICES ]]--
 
@@ -38,8 +40,8 @@ do
 
 		["CREATOR_SPOOF"] = true; -- Whether or not to return a spoofed version of CreatorId and CreatorType
 		["CREATOR_OBJ"] = {
-			["CreatorType"] = Enum.CreatorType.Group,
-			["CreatorId"] = 1, -- Whitehill Group
+			["CreatorType"] = Enum.CreatorType.User,
+			["CreatorId"] = 1,
 		}; -- Spoofed object to return, respectively game.CreatorType and game.CreatorId
 
 		["GAMEID_SPOOF"] = true; -- Whether or not to spoof game.PlaceId and game.GameId
@@ -74,7 +76,7 @@ do
 
 		--[[ SPOOF ]]--
 
-		["SPOOF_ANTISET_SEC"] = true; -- Attempts to lock the spoofed variables (game and require) from being changed using rawset
+		["SPOOF_ANTISET_SEC"] = false; -- Attempts to lock the spoofed variables (game and require) from being changed using rawset
 		["SPOOF_GAMESERVICES_SEC"] = true; -- Attempts to return the same game spoof when SERVICE.Parent is indexed.
 		["WRAP_GAMESERVICES_SEC"] = true; -- Wraps any Instance accessed from SERVICE with a proxy that returns the same game spoof
 		["WRAP_SCRIPT_SEC"] = true; -- Same as above, for script global
@@ -84,10 +86,12 @@ do
 		-- Works only if REQUIRE_SPOOF is enabled, and spoofs game only if GAME_SPOOF is enabled
 		-- For more advanced auditing, please spoof the modules as local copies in workspace and reuse this script at the top.
 
-		["SPOOF_FENV_SEC"] = true; -- Attempts to prevent further getfenv and setfenv calls from targeting the base script environment
-		["FENV_WHITELIST"] = {"require"; "game"; "workspace"} -- List of globals to protect using previous setting
-	}
+		["SPOOF_FENV_SEC"] = false; -- Attempts to prevent further getfenv and setfenv calls from targeting the base script environment
+		["FENV_WHITELIST"] = {"require"; "game"; "workspace"}; -- List of globals to protect using previous setting
 
+		["SPOOF_FENV"] = true;
+
+	}
 
 	local oldGame = game
 	local oldWorkspace = workspace
@@ -141,7 +145,7 @@ do
 				local result = data[k] or __olssa_wrap(obj[k])
 
 				-- Wraps any methods in an extra function to fix the "expect ':', not '.'" error
-				if __olssa_configuration.LOCAL_MAINMODULE_NAME_SEC and typeof(obj) == "Instance" and obj:IsA("ModuleScript") and obj.Name:match(__olssa_configuration.REQUIRE_SPOOF_PREFIX) then
+				if __olssa_configuration.LOCAL_MAINMODULE_NAME_SEC and typeof(obj) == "Instance" and obj:IsA("ModuleScript") and obj.Name:match(__olssa_configuration.REQUIRE_PREFIX) then
 					result = "MainModule"
 				end
 
@@ -223,13 +227,13 @@ do
 	local oldGetFenv = getfenv
 	local oldSetFenv = setfenv
 
-	require = function(...)
+	_require = function(...)
 		local module = ({...})[1]
 		if type(module) == 'number' then
 			__olssa_verb("Require called with online module: "..tostring(module))
 
 			if __olssa_configuration.REQUIRE_SPOOF then
-				local mobj = oldWorkspace:WaitForChild(__olssa_configuration.REQUIRE_SPOOF_PREFIX .. module, 15)
+				local mobj = __olssa_configuration.REQUIRE_SPOOF_FOLDER:WaitForChild(__olssa_configuration.REQUIRE_PREFIX .. module, 15)
 				if mobj then
 					module = mobj
 					__olssa_verb("Require spoof requiring module '".. mobj.Name .."' instead of original")
@@ -239,7 +243,11 @@ do
 			end
 		elseif type(module) == 'userdata' then
 			__olssa_verb("Require called with local module: ".. tostring(module.Parent.Name) .." > " .. tostring(module.Name))
+			if __olssa_configuration.REQUIRE_LOCALMODRDF then
+				module = __olssa_configuration.REQUIRE_LOCALMODRDF(module.Parent, module.Name)
+			end
 		end
+
 
 		local success, output = pcall(__olssa_oldrequire, module)
 		if not success then
@@ -266,6 +274,12 @@ do
 
 		return output
 	end
+
+	if not __olssa_configuration.SPOOF_FENV then
+		require = _require
+	end
+
+
 
 
 	local oldMarketplaceService = game:GetService("MarketplaceService")
@@ -415,7 +429,7 @@ do
 
 			----- game SPOOF -----
 			local oldWorkspace = workspace
-			game = setmetatable({
+			_game = setmetatable({
 				GetService = function(self, service)
 					__olssa_verb("GetService called with Service: "..tostring(service))
 					if service == "HttpService" then
@@ -435,13 +449,23 @@ do
 				PlaceId = __olssa_configuration.GAMEID_SPOOF and tonumber(__olssa_configuration.GAMEID_OBJ["PlaceId"]) or oldGame.PlaceId,
 			}, { __index = oldGame, __metatable = "The metatable is locked" })
 
+			if not __olssa_configuration.SPOOF_FENV then
+				game = _game
+			end
+
 			if __olssa_configuration.SPOOF_GAMESERVICES_SEC then
-				workspace = setmetatable({}, { __service = oldWorkspace, __index = __olssa_configuration.WRAP_GAMESERVICES_SEC and __olssa_wrap(oldWorkspace) or oldWorkspace, __metatable = "The metatable is locked" })
+				_workspace = setmetatable({}, { __service = oldWorkspace, __index = __olssa_configuration.WRAP_GAMESERVICES_SEC and __olssa_wrap(oldWorkspace) or oldWorkspace, __metatable = "The metatable is locked" })
+				if not __olssa_configuration.SPOOF_FENV then
+					workspace = _workspace
+				end
 			end;
 			if __olssa_configuration.WRAP_SCRIPT_SEC then
-				script = setmetatable({
+				_script = setmetatable({
 					--Parent = game,
 				}, { __service = oldScript, __index = __olssa_wrap(oldScript), __metatable = "The metatable is locked" })
+				if not __olssa_configuration.SPOOF_FENV then
+					script = _script
+				end
 			end
 		end
 	end
@@ -449,18 +473,21 @@ do
 	local OldRawset = rawset
 	if __olssa_configuration.SPOOF_ANTISET_SEC then
 		do
-			rawset = function(self, k, v)
+			_rawset = function(self, k, v)
 				if self == require or self == game then
 					error("Attempt to modify a readonly table", 2)
 				else
 					return OldRawset(self, k, v)
 				end
 			end
+			if not __olssa_configuration.SPOOF_FENV then
+				rawset = _rawset
+			end
 		end
 	end
 
 	if __olssa_configuration.SPOOF_FENV_SEC then
-		getfenv = function(stack)
+		_getfenv = function(stack)
 			__olssa_verb("getfenv called with stack number: ".. tostring(stack or 0))
 			return oldGetFenv(stack) == baseEnv and setmetatable({}, {
 				__metatable = function()
@@ -479,15 +506,53 @@ do
 				end,
 			}) or oldGetFenv(stack)
 		end;
-		setfenv = function(stack, env)
+		_setfenv = function(stack, env)
 			__olssa_verb("setfenv called with stack number: ".. tostring(stack or 0))
 			return oldGetFenv(stack) == baseEnv and true or oldSetFenv(stack, env)
 		end;
+		if not __olssa_configuration.SPOOF_FENV then
+			getfenv = _getfenv
+			setfenv = _setfenv
+		end
 	end
 
 	if __olssa_configuration.WRAP_SCRIPT_SEC then
-		script = __olssa_wrap(oldScript, {
+		_script = __olssa_wrap(oldScript, {
 			--Parent = game,
 		})
+		if not __olssa_configuration.SPOOF_FENV then
+			script = _script
+		end
 	end
+
+
+	if __olssa_configuration.SPOOF_FENV then
+		local oldenv = getfenv()
+		local meta = setmetatable({},{
+			__index = function(self,index)
+				if index == 'require' and __olssa_configuration.REQUIRE_SPOOF then
+					return _require
+				elseif index == 'game' and __olssa_configuration.GAME_SPOOF then
+					return _game
+				elseif index == 'workspace' and __olssa_configuration.SPOOF_GAMESERVICES_SEC then
+					return _workspace
+				elseif index == 'script' and __olssa_configuration.WRAP_SCRIPT_SEC then
+					return _script
+				elseif index == 'rawset' and __olssa_configuration.SPOOF_ANTISET_SEC then
+					return _rawset
+				elseif index == 'getfenv' and __olssa_configuration.SPOOF_FENV_SEC then
+					return _getfenv
+				elseif index == 'setfenv' and __olssa_configuration.SPOOF_FENV_SEC then
+					return _setfenv
+				end
+				return oldenv[index]
+			end,
+			__newindex = function(self,index,val)
+				oldenv[index] = val
+			end,
+		})
+		setfenv(1,meta)
+	end
+
+
 end -- !! OLSSA Auditor Snippet End !!
