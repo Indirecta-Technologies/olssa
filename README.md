@@ -33,16 +33,22 @@ What each setting does, explained as best as possible. Keep in mind everything's
   - Set this to true to enable output from extra, experimental, logs like metamethods that may potentially spam the output or crash the script
 - ### `REVISION` **string**
   ```js
-  "pure-v2.2"
+  "alpha-v2.3"
   ```
   - OLSSA Snippet Revision  
   - It is recommended not to change this, but you can use it to label different OLSSA snippet configurations
-- ### `LOG_FILTER` **string**
+- ### `LOG_WHITELIST` **string**
   ```js
   nil
   ```
    - Set this to a string with a valid lua pattern that will match your desired logs  
-   - When the pattern matches it will prevent the OLSSA Verbose log from sending to console
+   - When the pattern matches it will prevent __all other__ verbose logs from printing to console
+- ### `LOG_BLACKLIST` **string**
+  ```js
+  nil
+  ```
+   - Set this to a string with a valid lua pattern that will match your undesired logs  
+   - When the pattern matches it will prevent the undesired verbose log from printing to console
 
 ### Require
 - ### `REQUIRE_SPOOF` **boolean**
@@ -206,7 +212,7 @@ OLSSA is intended for educational purposes, it is your own responsibility to res
 
 ### 🗒️ GPL v3 License
 
-OLSSA is released under the GNU General Public License (GPL) version 3.  
+OLSSA is released under the [GNU General Public License (GPL) V3](https://www.gnu.org/licenses/gpl-3.0.html).  
 This license provides you with the freedom to study, modify, and distribute the code under certain conditions. 
 
 ### [GitHub Repo](https://github.com/Indirecta-Technologies/olssa)
