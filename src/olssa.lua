@@ -1,31 +1,39 @@
 --[[
 
-`/shdmmmmmmmmmd-`ymmmddyo:`       //                sm- /h/                        --
-`yNMMMMMMMMMMMMm-.dMMMMMMMMMN+     `MN  `-:::.`   .-:-hM- -o-  .-::.  .::-.   `.:::` MN--. `-::-.
-yMMMMMMMMMMMMMd.:NMMMMMMMMMMMM+    `MN  yMs+oNh  oNy++mM- +Mo -Mm++:`hmo+yN+ .dmo++- MNoo/ `o+odN:
-yMMMMMMMMMMMMy`+NMMMMMMMMMMMMM+    `MN  yM:  dM. MN   yM- +Mo -Mh   /Mmss    sM+     MN    +h ohMo
-`yNMMMMMMMMMo`sMMMMMMMMMMMMMNo     `MN  yM:  dM. oNy//dM- +Mo -Mh   `dNs++o. -mm+//- dM+/+ mN+/sMo
- `/shddddd/ odddddddddddho:`       ::  .:`  -:   `:///-` .:. `:-     .://:`  `-///. `-//: `-///:.
-
-	Free and opensource technology for everyone to enjoy.
-
+    `/shdmmmmmmmmmd-`ymmmddyo:`       //                sm- /h/                        --
+  `yNMMMMMMMMMMMMm-.dMMMMMMMMMN+     `MN  `-:::.`   .-:-hM- -o-  .-::.  .::-.   `.:::` MN--. `-::-.
+  yMMMMMMMMMMMMMd.:NMMMMMMMMMMMM+    `MN  yMs+oNh  oNy++mM- +Mo -Mm++:`hmo+yN+ .dmo++- MNoo/ `o+odN:
+  yMMMMMMMMMMMMy`+NMMMMMMMMMMMMM+    `MN  yM:  dM. MN   yM- +Mo -Mh   /Mmss    sM+     MN    +h ohMo
+  `yNMMMMMMMMMo`sMMMMMMMMMMMMMNo     `MN  yM:  dM. oNy//dM- +Mo -Mh   `dNs++o. -mm+//- dM+/+ mN+/sMo
+    `/shddddd/ odddddddddddho:`       ::  .:`  -:   `:///-` .:. `:-     .://:`  `-///. `-//: `-///:.
+   ___  _     ____ ____    _
+  / _ \| |   / ___/ ___|  / \     (v)
+ | | | | |   \___ \___ \ / _ \   //-\\ 
+ | |_| | |___ ___) |__) / ___ \  (\_/)
+  \___/|_____|____/____/_/   \_\ _v v_ 
+                                
+  Obfuscated Luau Script Security Audtor (OLSSA) by  ( / ) Indirecta
+  
+  (i) Licensed under the GNU General Public License v3.0
+		<https://www.gnu.org/licenses/gpl-3.0.html>
 ]]
 
--- Obfuscated Luau Script Security Audtor (OLSSA)
+-- ⚠️ Make sure to use the auditor at the top of any script to prevent environment leaks ⚠️
 
--- !! Make sure to use the auditor at the top of any script to prevent environment leaks
 local baseEnv = getfenv()
 do
 
 	local __olssa_configuration = {
+		
+		["REVISION"] = "alpha-v2.3"; -- OLSSA Snippet Revision
 
-		--[[ GENERAL ]]--
+		--[[ LOGGING ]]--
 		["VERBOSE"] = true; -- Whether or not to log all spoof actions, requests, script activity
 		["EXTRA_VERBOSE"] = false; -- Experimental, logs activity such as indexes from metamethods
-
-		["REVISION"] = "alpha-v2.2"; -- OLSSA Snippet Revision
-		["LOG_FILTER"] = nil; -- Set this to a string with a valid lua pattern that will match your desired logs. When the pattern matches it will
-		-- prevent the OLSSA Verbose log from sending to console
+		["LOG_WHITELIST"] = nil; -- Set this to a string with a valid lua pattern that will match your desired logs. When the pattern matches it will
+		-- only allow the desired OLSSA log from sending to console
+		["LOG_BLACKLIST"] = nil; -- Set this to a string with a valid lua pattern that will match your desired logs. When the pattern matches it will
+		-- prevent the undesired OLSSA log from sending to console
 
 		--[[ REQUIRE ]]--
 
@@ -100,8 +108,11 @@ do
 	local __olssa_starttime = os.clock()
 	local __olssa_verb = function(...)
 		if __olssa_configuration.VERBOSE then
-			if __olssa_configuration.LOG_FILTER and table.concat({...}):match(__olssa_configuration.LOG_FILTER) then return end;
-			print("OLSSA LOG","::",...,":: SCRIPT",oldScript.Name,":: TIMESTAMP", math.round(os.clock() - __olssa_starttime))
+			
+			if __olssa_configuration.LOG_BLACKLIST and table.concat({...}):match(__olssa_configuration.LOG_BLACKLIST) then return end;
+			if __olssa_configuration.LOG_WHITELIST and not table.concat({...}):match(__olssa_configuration.LOG_WHITELIST) then return end;
+			
+			print("OLSSA LOG","::",...,":: SCRIPT",oldScript.Name,":: TIMESTAMP", math.round((os.clock() - __olssa_starttime)*10))
 		end
 	end
 
@@ -243,6 +254,7 @@ do
 			end
 		elseif type(module) == 'userdata' then
 			__olssa_verb("Require called with local module: ".. tostring(module.Parent.Name) .." > " .. tostring(module.Name))
+			module = __olssa_unwrap(module) -- Unwrap module, as it could cause issues being accepted by require function
 			if __olssa_configuration.REQUIRE_LOCALMODRDF then
 				module = __olssa_configuration.REQUIRE_LOCALMODRDF(module.Parent, module.Name)
 			end
@@ -555,4 +567,4 @@ do
 	end
 
 
-end -- !! OLSSA Auditor Snippet End !!
+end -- ⚠️ OLSSA Auditor Snippet End ⚠️
