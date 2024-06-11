@@ -12,7 +12,7 @@
  | |_| | |___ ___) |__) / ___ \  (\_/)
   \___/|_____|____/____/_/   \_\ _v v_ 
                                 
-  Obfuscated Luau Script Security Audtor (OLSSA) by  ( / ) Indirecta
+  Obfuscated Luau Script Security Auditor (OLSSA) by  ( / ) Indirecta
   
   (i) Licensed under the GNU General Public License v3.0
 		<https://www.gnu.org/licenses/gpl-3.0.html>
