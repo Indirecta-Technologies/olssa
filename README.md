@@ -33,7 +33,7 @@ What each setting does, explained as best as possible. Keep in mind everything's
   - Set this to true to enable output from extra, experimental, logs like metamethods that may potentially spam the output or crash the script
 - ### `REVISION` **string**
   ```js
-  "alpha-v2.3"
+  "alpha-v2.4"
   ```
   - OLSSA Snippet Revision  
   - It is recommended not to change this, but you can use it to label different OLSSA snippet configurations
@@ -168,6 +168,11 @@ What each setting does, explained as best as possible. Keep in mind everything's
     true
      ```
   - Works in conjuction with SPOOF_GAMESERVICES_SEC to wrap the service instances using __olssa_wrap
+- ### `WRAP_SCRIPT_SEC` **boolean**
+  ```js
+    true
+     ```
+  - Wraps the game global instance using __olssa_wrap
 - ### `WRAP_SCRIPT_SEC` **boolean**
   ```js
     true
