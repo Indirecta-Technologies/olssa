@@ -168,7 +168,7 @@ What each setting does, explained as best as possible. Keep in mind everything's
     true
      ```
   - Works in conjuction with SPOOF_GAMESERVICES_SEC to wrap the service instances using __olssa_wrap
-- ### `WRAP_SCRIPT_SEC` **boolean**
+- ### `WRAP_GAME_SEC` **boolean**
   ```js
     true
      ```
