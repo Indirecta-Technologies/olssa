@@ -8,12 +8,12 @@
     `/shddddd/ odddddddddddho:`       ::  .:`  -:   `:///-` .:. `:-     .://:`  `-///. `-//: `-///:.
    ___  _     ____ ____    _
   / _ \| |   / ___/ ___|  / \     (v)
- | | | | |   \___ \___ \ / _ \   //-\\ 
+ | | | | |   \___ \___ \ / _ \   //-\\
  | |_| | |___ ___) |__) / ___ \  (\_/)
-  \___/|_____|____/____/_/   \_\ _v v_ 
-                                
-  Obfuscated Luau Script Security Auditor (OLSSA) by  ( / ) Indirecta
-  
+  \___/|_____|____/____/_/   \_\ _v v_
+
+  Obfuscated Luau Script Security Audtor (OLSSA) by  ( / ) Indirecta
+
   (i) Licensed under the GNU General Public License v3.0
 		<https://www.gnu.org/licenses/gpl-3.0.html>
 ]]
@@ -22,10 +22,9 @@
 
 local baseEnv = getfenv()
 do
-
 	local __olssa_configuration = {
-		
-		["REVISION"] = "alpha-v2.3"; -- OLSSA Snippet Revision
+
+		["REVISION"] = "alpha-v2.4"; -- OLSSA Snippet Revision
 
 		--[[ LOGGING ]]--
 		["VERBOSE"] = true; -- Whether or not to log all spoof actions, requests, script activity
@@ -87,6 +86,7 @@ do
 		["SPOOF_ANTISET_SEC"] = false; -- Attempts to lock the spoofed variables (game and require) from being changed using rawset
 		["SPOOF_GAMESERVICES_SEC"] = true; -- Attempts to return the same game spoof when SERVICE.Parent is indexed.
 		["WRAP_GAMESERVICES_SEC"] = true; -- Wraps any Instance accessed from SERVICE with a proxy that returns the same game spoof
+		["WRAP_GAME_SEC"] = true; -- Same as above, for script global
 		["WRAP_SCRIPT_SEC"] = true; -- Same as above, for script global
 		["LOCAL_MAINMODULE_NAME_SEC"] = true; -- Attempts to return original "MainModule" as the name for local spoofed online modules instead of the different name
 
@@ -97,9 +97,11 @@ do
 		["SPOOF_FENV_SEC"] = false; -- Attempts to prevent further getfenv and setfenv calls from targeting the base script environment
 		["FENV_WHITELIST"] = {"require"; "game"; "workspace"}; -- List of globals to protect using previous setting
 
-		["SPOOF_FENV"] = true;
+		["SPOOF_FENV"] = false;
 
 	}
+	
+	debug.setmemorycategory(script.Name.." - OLSSA "..__olssa_configuration.REVISION)
 
 	local oldGame = game
 	local oldWorkspace = workspace
@@ -108,10 +110,10 @@ do
 	local __olssa_starttime = os.clock()
 	local __olssa_verb = function(...)
 		if __olssa_configuration.VERBOSE then
-			
+
 			if __olssa_configuration.LOG_BLACKLIST and table.concat({...}):match(__olssa_configuration.LOG_BLACKLIST) then return end;
 			if __olssa_configuration.LOG_WHITELIST and not table.concat({...}):match(__olssa_configuration.LOG_WHITELIST) then return end;
-			
+
 			print("OLSSA LOG","::",...,":: SCRIPT",oldScript.Name,":: TIMESTAMP", math.round((os.clock() - __olssa_starttime)*10))
 		end
 	end
@@ -143,6 +145,7 @@ do
 			local meta = getmetatable(fake)
 
 			meta.__index = function(s,k)
+				-- Shouldn't need to do this for actual game services, as it would be redundant.
 				if __olssa_configuration.SPOOF_GAMESERVICES_SEC and obj[k] == oldGame then
 					__olssa_verb("Service Game Key spoofed from: "..tostring(obj))
 					return game
@@ -459,7 +462,7 @@ do
 				CreatorType = __olssa_configuration.CREATOR_SPOOF and __olssa_configuration.CREATOR_OBJ["CreatorType"] or oldGame.CreatorType,
 				GameId = __olssa_configuration.GAMEID_SPOOF and tonumber(__olssa_configuration.GAMEID_OBJ["GameId"]) or oldGame.GameId,
 				PlaceId = __olssa_configuration.GAMEID_SPOOF and tonumber(__olssa_configuration.GAMEID_OBJ["PlaceId"]) or oldGame.PlaceId,
-			}, { __index = oldGame, __metatable = "The metatable is locked" })
+			}, { __index = __olssa_configuration.WRAP_GAME_SEC and __olssa_wrap(oldGame) or oldGame, __metatable = "The metatable is locked" })
 
 			if not __olssa_configuration.SPOOF_FENV then
 				game = _game
@@ -529,9 +532,7 @@ do
 	end
 
 	if __olssa_configuration.WRAP_SCRIPT_SEC then
-		_script = __olssa_wrap(oldScript, {
-			--Parent = game,
-		})
+		_script = __olssa_wrap(oldScript)
 		if not __olssa_configuration.SPOOF_FENV then
 			script = _script
 		end
@@ -566,5 +567,5 @@ do
 		setfenv(1,meta)
 	end
 
-
+	debug.resetmemorycategory()
 end -- ⚠️ OLSSA Auditor Snippet End ⚠️
