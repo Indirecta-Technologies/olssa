@@ -15,7 +15,7 @@
   Obfuscated Luau Script Security Audtor (OLSSA) by  ( / ) Indirecta
 
   (i) Licensed under the GNU General Public License v3.0
-		<https://www.gnu.org/licenses/gpl-3.0.html>
+		<https://www.gnu.org/licenses/gpl-3.0.html>	
 ]]
 
 -- ⚠️ Make sure to use the auditor at the top of any script to prevent environment leaks ⚠️
@@ -24,7 +24,7 @@ local baseEnv = getfenv()
 do
 	local __olssa_configuration = {
 
-		["REVISION"] = "alpha-v2.4"; -- OLSSA Snippet Revision
+		["REVISION"] = "alpha-v2.5"; -- OLSSA Snippet Revision
 
 		--[[ LOGGING ]]--
 		["VERBOSE"] = true; -- Whether or not to log all spoof actions, requests, script activity
@@ -174,7 +174,12 @@ do
 						__olssa_verb("[FUNC WRAP] "..debug.info(result,"n").."/"..tostring(result))
 					end
 					local fake = function(_, ...)
-						local args = __olssa_unwrap{...}
+						local args = {};
+				
+						for k,v in next,{...} do
+							-- Unwrap the arguments so the real method can process the real versions of the objects
+							args[k] = __olssa_unwrap(v)
+						end
 
 						local results = __olssa_wrap{result(obj, unpack(args))}
 
@@ -200,7 +205,7 @@ do
 
 			meta.__metatable = getmetatable(obj)
 
-			--store the object in the cache, then return
+			-- Store the object in the cache, then return
 			__olssa_cache[fake] = obj
 			return fake
 		elseif type(obj) == "table" then
@@ -213,19 +218,23 @@ do
 			if __olssa_configuration.EXTRA_VERBOSE then
 				__olssa_verb("[FUNC WRAP] "..debug.info(obj,"n").."/"..tostring(obj))
 			end
-			--the goal is to return a fake function that behaves like the real one, then returns wrapped results
+			-- The goal is to return a fake function that behaves like the real one, then returns wrapped results
 			local fake = function(...)
-				--unwrap the arguments so the real method can process the real versions of the objects
-				local args = __olssa_unwrap{...}
+				local args = {};
+				
+				for k,v in next,{...} do
+					-- Unwrap the arguments so the real method can process the real versions of the objects
+					args[k] = __olssa_unwrap(v)
+				end
 
-				--call the method with the real arguments, then catch the return values in a table and wrap them
+				-- Call the method with the real arguments, then catch the return values in a table and wrap them
 				local results = __olssa_wrap{obj(unpack(args))}
 
-				--return the wrapped results
+				-- Return the wrapped results
 				return unpack(results)
 			end
 
-			-- let's put fake functions into the cache as well for consistency
+			-- Put fake functions into the cache as well for consistency
 			__olssa_cache[fake] = obj
 			return fake
 		else
