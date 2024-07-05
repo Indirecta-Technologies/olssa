@@ -41,7 +41,7 @@ do
 		["REQUIRE_LOCALMODRDF"] = nil; -- Redefine a local module's instance variable working up from one of it's parents
 		["REQUIRE_SPOOF_FOLDER"] = workspace; -- Where to look for the local modules when spoofing
 
-		--[[ GAME & SERVICES ]]--
+		------ GAME & SERVICE SPECIFIC SPOOFS ------
 
 		["GAME_SPOOF"] = true; -- Handles all the game service and variable spoofs below
 
@@ -81,7 +81,7 @@ do
 			return nil
 		end;
 
-		--[[ SPOOF ]]--
+		------ OBJECT WRAPPING & SPOOFING BEHAVIOR ------
 
 		["RAWSET_SEC"] = false; -- Attempts to lock the spoofed variables (game and require) from being changed using rawset
 		["WRAP_GAMESERVICES_SEC"] = true; -- Wraps any Instance accessed from SERVICE with a proxy
