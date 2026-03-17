@@ -1,0 +1,16 @@
+{
+    "name": "OLSSA Tests",
+    "tree": {
+        "$className": "DataModel",
+
+        "ServerScriptService": {
+            "$className": "ServerScriptService",
+            "src": {
+                "$path": "src"
+            },
+            "tests": {
+                "$path": "tests"
+            }
+        }
+    }
+}
