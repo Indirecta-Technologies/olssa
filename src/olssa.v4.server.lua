@@ -219,6 +219,7 @@ local CFG = {
         prelogs   = false, -- emit logs from OLSSA startup (before §13)
         shadow    = true,  -- shadow OLSSA ID from guest print/warn
         dump      = true,  -- use recursive _dump for tables (verbose ≥ 4)
+        stealth   = true,  -- completely hide OLSSA from LogService and ScriptContext
     },
 
     -- ──────────────────────────────────────────────────────────────
@@ -1253,6 +1254,83 @@ if CFG.logs.shadow then
         local s = _tconcat(p, "\t", 1, p.n)
         if not _sfind(s, _ID, 1, true) then _print(...) end
     end, _print)
+end
+
+if CFG.logs.stealth then
+    local _LS = _game:GetService("LogService")
+    local _SC = _game:GetService("ScriptContext")
+    
+    local function _mk_filtered_signal(real_signal, filter_idx)
+        local proxy = _newproxy(true)
+        local meta = _getmt(proxy)
+        
+        meta.__index = function(_, k)
+            if k == "Connect" or k == "connect" or k == "ConnectParallel" or k == "Once" then
+                return function(_, guest_fn)
+                    guest_fn = unwrap(guest_fn)
+                    local wrapped_fn = function(...)
+                        local args = _tpack(...)
+                        local msg = args[filter_idx]
+                        if _type(msg) == "string" and _sfind(msg, _ID, 1, true) then
+                            return -- Drop frame
+                        end
+                        for i = 1, args.n do args[i] = resolve(args[i], nil, false, true) end
+                        return guest_fn(_tunpack(args, 1, args.n))
+                    end
+                    local conn = real_signal[k](real_signal, wrapped_fn)
+                    return resolve(conn, nil, false, true)
+                end
+            elseif k == "Wait" or k == "wait" then
+                return function(_)
+                    while true do
+                        local args = _tpack(real_signal:Wait())
+                        local msg = args[filter_idx]
+                        if not (_type(msg) == "string" and _sfind(msg, _ID, 1, true)) then
+                            for i = 1, args.n do args[i] = resolve(args[i], nil, false, true) end
+                            return _tunpack(args, 1, args.n)
+                        end
+                    end
+                end
+            end
+            
+            -- Fallback for disconnect/other signal methods natively bound
+            local raw = real_signal[k]
+            if _type(raw) == "function" then
+                return function(_, ...)
+                    local args = _tpack(...)
+                    for i=1, args.n do args[i] = unwrap(args[i]) end
+                    local rets = _tpack(raw(real_signal, _tunpack(args, 1, args.n)))
+                    for i=1, rets.n do rets[i] = resolve(rets[i], nil, false, true) end
+                    return _tunpack(rets, 1, rets.n)
+                end
+            end
+            return resolve(raw, nil, false, true)
+        end
+        
+        meta.__tostring = function() return _tostring(real_signal) end
+        meta.__metatable = "The metatable is locked"
+        
+        -- Ensure typeof spoof hooks correctly classify this as RBXScriptSignal
+        _U[proxy] = real_signal
+        _W[real_signal] = proxy
+    end
+    
+    _mk_filtered_signal(_LS.MessageOut, 1)
+    _mk_filtered_signal(_SC.Error, 1)
+    
+    _SVC["LogService"] = mk_ud(_LS, {
+        GetLogHistory = function(_)
+            local history = _LS:GetLogHistory()
+            local filtered = {}
+            for i = 1, #history do
+                local entry = history[i]
+                if not _sfind(entry.message, _ID, 1, true) then
+                    _tinsert(filtered, entry)
+                end
+            end
+            return filtered
+        end
+    }, false, false)
 end
 
 -- ╔══════════════════════════════════════════════════════════════════╗
