@@ -230,6 +230,24 @@ local CFG = {
     },
 
     -- ──────────────────────────────────────────────────────────────
+    -- performance:  advanced memory and compute overhead controls
+    -- ──────────────────────────────────────────────────────────────
+    -- Optimizations targeting heavy antitamper detection suites (e.g. LST, fix).
+    -- When executing 100k+ operations/sec, Lua GC and table lookups become bottlenecks.
+    performance = {
+        -- fast_resolve: (Default: true)
+        -- Skips up to 10 internal environment validations for ALREADY wrapped proxies.
+        -- Prevents O(N) degradation when scripts iterate over large tables of spoofed globals.
+        fast_resolve = true,
+
+        -- shared_meta: (Default: true)
+        -- Forces Instance Userdata proxies to use globally pre-allocated metamethods.
+        -- Eliminates 11 closure allocations per object fetched from the engine,
+        -- completely resolving garbage-collection timeouts during deep scans.
+        shared_meta  = true,
+    },
+
+    -- ──────────────────────────────────────────────────────────────
     -- time:  unified dilated clock
     --   dilation: multiplier on elapsed time visible to guest
     --     0.15 = guest sees time at 15% of real speed
@@ -384,6 +402,9 @@ local _SVC  = CFG.game.services
 local _KS   = {}
 local _CFNS = {}   -- [F-03] C-masking table
 
+local _FAST_RESOLVE = CFG.performance and CFG.performance.fast_resolve
+local _SHARED_META  = CFG.performance and CFG.performance.shared_meta
+
 -- Blacklist sets: values/keys that always pass through raw
 local _BLV = {}
 local _BLK = {}
@@ -406,6 +427,7 @@ resolve = function(v, cnt, light, isgame)
     if v == nil then return nil end
     local t = _type(v)
     if t ~= "userdata" and t ~= "table" and t ~= "function" then return v end
+    if _FAST_RESOLVE and _U[v] ~= nil then return v end
     if _BLV[v] then return v end
 
     -- Cached proxy takes priority (covers _W-registered service proxies)
@@ -459,10 +481,100 @@ end
 -- ║          destructors are host-only and cannot be called from Lua ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
+-- Shared metamethods to prevent allocation overhead
+local function _sh_tostring(self) return _tostring(_U[self]) end
+local function _sh_newindex(self, k, v) _U[self][k] = unwrap(v) end
+local function _sh_len(self) return #(_U[self]) end
+local function _sh_unm(self) return -(_U[self]) end
+local function _sh_concat(a, b) return (_U[a] or a) .. (_U[b] or b) end
+local function _sh_eq(a, b) return (_U[a] or a) == (_U[b] or b) end
+local function _sh_lt(a, b) return (_U[a] or a) <  (_U[b] or b) end
+local function _sh_le(a, b) return (_U[a] or a) <= (_U[b] or b) end
+local function _sh_iter() return function() end, nil, nil end
+
+-- For isgame = true
+local function _sh_index_game(self, k)
+    local obj = _U[self]
+    if _BLK[k] then return obj[k] end
+    local raw = obj[k]
+    if _BLV[raw] then return raw end
+    if _type(raw) == "userdata" then
+        local ti = _typeof(raw)
+        if ti == "Instance" then
+            local svc = _SVC[(raw :: any).ClassName] or _SVC[raw]
+            if svc ~= nil then return svc end
+        end
+    end
+    local ks = _KS[raw]
+    if ks ~= nil then return ks end
+    if _type(raw) == "function" then return wrap(raw, nil, false, true) end
+    return wrap(raw, nil, false, true)
+end
+
+local function _sh_call_game(self, ...)
+    local obj = _U[self]
+    local args = _tpack(...)
+    for i = 1, args.n do args[i] = unwrap(args[i]) end
+    local rets = _tpack(_pcall(obj, _tunpack(args, 1, args.n)))
+    if not rets[1] then _error(rets[2], 0) end
+    for i = 2, rets.n do
+        rets[i] = resolve(rets[i], nil, false, true)
+    end
+    return _tunpack(rets, 2, rets.n)
+end
+
+-- For isgame = false
+local function _sh_index_guest(self, k)
+    local obj = _U[self]
+    if _BLK[k] then return obj[k] end
+    local raw = obj[k]
+    if _BLV[raw] then return raw end
+    local ks = _KS[raw]
+    if ks ~= nil then return ks end
+    if _type(raw) == "function" then return wrap(raw, nil, false, false) end
+    return wrap(raw, nil, false, false)
+end
+
+local function _sh_call_guest(self, ...)
+    local obj = _U[self]
+    local args = _tpack(...)
+    for i = 1, args.n do args[i] = unwrap(args[i]) end
+    local rets = _tpack(_pcall(obj, _tunpack(args, 1, args.n)))
+    if not rets[1] then _error(rets[2], 0) end
+    for i = 2, rets.n do
+        rets[i] = resolve(rets[i], nil, false, false)
+    end
+    return _tunpack(rets, 2, rets.n)
+end
+
 -- ── Userdata proxy (Roblox Instances) ────────────────────────────
 local function mk_ud(obj, cnt, light, isgame)
     local proxy = _newproxy(true)
     local meta  = _getmt(proxy)
+
+    if _SHARED_META and cnt == nil and light == false then
+        meta.__tostring = _sh_tostring
+        meta.__newindex = _sh_newindex
+        meta.__len      = _sh_len
+        meta.__unm      = _sh_unm
+        meta.__concat   = _sh_concat
+        meta.__eq       = _sh_eq
+        meta.__lt       = _sh_lt
+        meta.__le       = _sh_le
+        meta.__iter     = _sh_iter
+        if isgame then
+            meta.__index = _sh_index_game
+            meta.__call  = _sh_call_game
+        else
+            meta.__index = _sh_index_guest
+            meta.__call  = _sh_call_guest
+        end
+        meta.__metatable = _getmt(obj) or "The metatable is locked"
+
+        _W[obj]   = proxy
+        _U[proxy] = obj
+        return proxy
+    end
 
     meta.__index = function(_, k)
         if _BLK[k] then return obj[k] end
@@ -737,7 +849,6 @@ local _fenv = _setmt({}, {
 -- env_write: register a spoofed global in all relevant maps.
 -- cfn_write: same + mark fn as C-masquerade for debug.info.
 local function env_write(key, wrapped_v, original_v)
-    _KS[key] = wrapped_v
     if original_v ~= nil then
         _KS[original_v] = wrapped_v
         if _U[wrapped_v] == nil then
@@ -1280,6 +1391,7 @@ local function _resolveIterVal(v, isgame)
     if v == nil then return nil end
     local t = _type(v)
     if t ~= "userdata" and t ~= "table" and t ~= "function" then return v end
+    if _FAST_RESOLVE and _U[v] ~= nil then return v end
     if _BLV[v] then return v end
     local cached = _W[v]; if cached ~= nil then return cached end
     local ks = _KS[v]; if ks ~= nil then return ks end
@@ -2925,6 +3037,42 @@ if CFG.selftest.enabled then
                         allUD)
                 end
             end
+        end
+
+        -- ── Regression check: ".Name" returning spoofed global (v4.6.1) ─
+        do
+            local ok_w, ws = _pcall(function() return game:GetService("Workspace") end)
+            if ok_w and ws then
+                local wName = ""
+                local ok_n = _pcall(function() wName = ws.Name end)
+                _check("safecall_sim", ".Name property does not return wrapped global",
+                    ok_n and _type(wName) == "string" and wName == "Workspace")
+            end
+        end
+    end
+
+    -- ══════════════════════════════════════════════════════════════
+    _warn("[OLSSA·TEST] Cat: proxy_perf")
+    -- ══════════════════════════════════════════════════════════════
+    do
+        local ok, descs = _pcall(function() return game:GetDescendants() end)
+        if ok and descs then
+            local n = _mmin(#descs, 2000)
+            if n > 0 then
+                local t0 = _os_clock()
+                local count = 0
+                _pcall(function()
+                    for i = 1, n do
+                        local v = descs[i]
+                        if v then count += 1 end
+                    end
+                end)
+                local t1 = _os_clock()
+                _check("proxy_perf", "2000 proxy wrap access < 100ms", 
+                    count == n and (t1 - t0) * 1000 < 100)
+            end
+        else
+            _check("proxy_perf", "GetDescendants works", false)
         end
     end
 
